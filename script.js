@@ -4,7 +4,6 @@ const API_BASE_URL = "http://localhost:3031";
 // Data structures matching your API
 let devicesData = [];
 let accountCredentialsData = [];
-let peopleNearbyData = [];
 
 // Table state
 let currentPage = 1;
@@ -165,31 +164,6 @@ async function loadAccountCredentials() {
   }
 }
 
-// Load people nearby data
-async function loadPeopleNearby() {
-  try {
-    showLoading();
-    const response = await fetch(`${API_BASE_URL}/peopleNearbyCredentials`);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    peopleNearbyData = await response.json();
-    currentSection = "nearby";
-    filteredData = [...peopleNearbyData];
-    updateSectionTitle("People Nearby");
-    updateTableHeaders();
-    renderTable();
-    updatePagination();
-    updateEntriesInfo();
-    updateActiveNav("nearby");
-    hideLoading();
-  } catch (error) {
-    console.error("Error loading people nearby:", error);
-    showError("Failed to load people nearby data");
-    hideLoading();
-  }
-}
-
 // Update section title
 function updateSectionTitle(title) {
   if (sectionTitle) {
@@ -236,12 +210,6 @@ function filterData() {
             (item.message &&
               item.message.toLowerCase().includes(searchTerm))
           );
-        case "nearby":
-          return (
-            item.id.toString().includes(searchTerm) ||
-            item.profile_id.toString().includes(searchTerm) ||
-            item.account_id.toString().includes(searchTerm)
-          );
         default:
           return false;
       }
@@ -258,9 +226,6 @@ function getCurrentData() {
       break;
     case "accounts":
       data = accountCredentialsData;
-      break;
-    case "nearby":
-      data = peopleNearbyData;
       break;
     default:
       data = [];
@@ -286,9 +251,6 @@ function renderTable() {
         break;
       case "accounts":
         colSpan = 7; // ID, Email, Password, Device ID, Coordinate, Message, Actions
-        break;
-      case "nearby":
-        colSpan = 6; // ID, Profile ID, Account ID, -, -, Actions
         break;
       default:
         colSpan = 6;
@@ -343,23 +305,6 @@ function renderTable() {
                     </td>
                 `;
         break;
-      case "nearby":
-        row.innerHTML = `
-                    <td>${item.id}</td>
-                    <td>${item.profile_id}</td>
-                    <td>${item.account_id}</td>
-                    <td>-</td>
-                    <td>-</td>
-                    <td>
-                        <button class="btn btn-sm btn-outline-primary action-btn" onclick="editItem(${item.id})">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="btn btn-sm btn-outline-danger action-btn" onclick="deleteItem(${item.id})">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </td>
-                `;
-        break;
     }
 
     tableBody.appendChild(row);
@@ -386,16 +331,6 @@ function updateTableHeaders() {
                 <th>Device ID</th>
                 <th>Coordinate</th>
                 <th>Message</th>
-                <th>Actions</th>
-            `;
-      break;
-    case "nearby":
-      thead.innerHTML = `
-                <th>ID</th>
-                <th>Profile ID</th>
-                <th>Account ID</th>
-                <th>-</th>
-                <th>-</th>
                 <th>Actions</th>
             `;
       break;
@@ -561,9 +496,6 @@ function refreshData() {
     case "accounts":
       loadAccountCredentials();
       break;
-    case "nearby":
-      loadPeopleNearby();
-      break;
   }
 }
 
@@ -631,7 +563,6 @@ function showCurrentSectionForm() {
   // Hide all forms
   document.getElementById('devicesForm').style.display = 'none';
   document.getElementById('accountsForm').style.display = 'none';
-  document.getElementById('nearbyForm').style.display = 'none';
   
   // Show current section form
   switch (currentSection) {
@@ -640,9 +571,6 @@ function showCurrentSectionForm() {
       break;
     case 'accounts':
       document.getElementById('accountsForm').style.display = 'block';
-      break;
-    case 'nearby':
-      document.getElementById('nearbyForm').style.display = 'block';
       break;
   }
 }
@@ -654,8 +582,6 @@ function getCurrentSectionTitle() {
       return 'Device';
     case 'accounts':
       return 'Account Credential';
-    case 'nearby':
-      return 'Person Nearby';
     default:
       return 'Item';
   }
@@ -673,10 +599,6 @@ function populateFormWithData(item) {
       document.getElementById('deviceIdSelect').value = item.device_id || '';
       document.getElementById('coordinate').value = item.coordinate || '';
       document.getElementById('message').value = item.message || '';
-      break;
-    case 'nearby':
-      document.getElementById('profileId').value = item.profile_id || '';
-      document.getElementById('accountId').value = item.account_id || '';
       break;
   }
 }
@@ -746,12 +668,6 @@ async function saveItem() {
           message: document.getElementById('message').value
         };
         break;
-      case 'nearby':
-        data = {
-          profile_id: parseInt(document.getElementById('profileId').value),
-          account_id: parseInt(document.getElementById('accountId').value)
-        };
-        break;
     }
     
     // Validate required fields
@@ -803,12 +719,6 @@ function validateForm(data) {
     case 'accounts':
       if (!data.email || !data.password) {
         showError('Email and password are required');
-        return false;
-      }
-      break;
-    case 'nearby':
-      if (!data.profile_id || !data.account_id) {
-        showError('Profile ID and Account ID are required');
         return false;
       }
       break;

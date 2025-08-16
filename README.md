@@ -5,7 +5,7 @@ A responsive dashboard application built with Bootstrap that connects to your AP
 ## Features
 
 - **API Integration**: Connects to your backend API endpoints
-- **Three Data Sections**: Devices, Account Credentials, and People Nearby
+- **Two Data Sections**: Devices and Account Credentials
 - **Responsive Design**: Works on desktop and mobile devices
 - **Data Table**: Displays data with dynamic columns based on section
 - **Search Functionality**: Search through all table data in real-time
@@ -50,7 +50,6 @@ Ensure your API server has these endpoints available:
 
 - **`GET /devices`** - Returns list of devices
 - **`GET /accountCredentials`** - Returns account credentials with coordinates and messages
-- **`GET /peopleNearbyCredentials`** - Returns people nearby data
 
 ### 3. Test API Connection
 
@@ -62,9 +61,6 @@ curl https://your-api-domain.com/devices
 
 # Test account credentials endpoint  
 curl https://your-api-domain.com/accountCredentials
-
-# Test people nearby endpoint
-curl https://your-api-domain.com/peopleNearbyCredentials
 ```
 
 ### 4. Open the Dashboard
@@ -89,7 +85,6 @@ The dashboard integrates with the following API endpoints:
 
 - **`GET /devices`** - Fetch all devices (id, device_id)
 - **`GET /accountCredentials`** - Fetch account credentials (id, email, password, device_id, coordinate, message)
-- **`GET /peopleNearbyCredentials`** - Fetch people nearby (id, profile_id, account_id)
 
 ## Usage
 
@@ -97,7 +92,6 @@ The dashboard integrates with the following API endpoints:
 
 - **Devices**: View all registered devices with their IDs (3 columns: ID, Device ID, Actions)
 - **Account Credentials**: View user accounts with email, password, device ID, coordinates, and messages (7 columns)
-- **People Nearby**: View people nearby credentials with profile and account IDs (6 columns)
 
 ### Search
 
@@ -170,16 +164,6 @@ const API_BASE_URL = "http://localhost:3031";
   "device_id": "device123",
   "coordinate": "-7.2504,112.7688",
   "message": "Hello! Nice to meet you!"
-}
-```
-
-**People Nearby:**
-
-```json
-{
-  "id": 1,
-  "profile_id": 123,
-  "account_id": 456
 }
 ```
 
