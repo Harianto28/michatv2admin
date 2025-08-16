@@ -236,25 +236,61 @@
 /* Floating Action Button */
 .floating-action-btn {
   position: fixed;
-  bottom: 2rem;
-  right: 2rem;
+  bottom: 30px;
+  right: 30px;
   z-index: 1000;
 }
 
 .floating-action-btn .btn {
   width: 60px;
   height: 60px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+  border-radius: 50%;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
 }
 
-.small-arrow {
-  font-size: 0.6rem;
-  margin-top: -2px;
+.floating-action-btn .btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+
+/* Modal improvements */
+.modal-lg {
+  max-width: 600px;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.form-label {
+  font-weight: 500;
+  color: #495057;
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: #80bdff;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+/* Success and Error alerts */
+.alert {
+  border: none;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.alert-success {
+  background-color: #d4edda;
+  color: #155724;
+  border-left: 4px solid #28a745;
+}
+
+.alert-danger {
+  background-color: #f8d7da;
+  color: #721c24;
+  border-left: 4px solid #dc3545;
 }
 
 /* Responsive Design */

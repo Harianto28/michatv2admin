@@ -1,5 +1,5 @@
 // API Configuration
-const API_BASE_URL = "https://108bf6894af0.ngrok-free.app";
+const API_BASE_URL = "http://localhost:3031";
 
 // Data structures matching your API
 let devicesData = [];
@@ -12,6 +12,10 @@ let entriesPerPage = 10;
 let filteredData = [];
 let searchTerm = "";
 let currentSection = "devices"; // Track which section is active
+
+// Modal management
+let isEditMode = false;
+let currentEditId = null;
 
 // DOM elements
 const tableBody = document.getElementById("tableBody");
@@ -55,8 +59,6 @@ function setupEventListeners() {
 async function loadDevices() {
   try {
     showLoading();
-    console.log(`Attempting to fetch from: ${API_BASE_URL}/devices`);
-
     const response = await fetch(`${API_BASE_URL}/devices`, {
       method: "GET",
       headers: {
@@ -66,15 +68,25 @@ async function loadDevices() {
       mode: "cors",
     });
 
-    console.log("Response status:", response.status);
-    console.log("Response headers:", response.headers);
-
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    const data = await response.json();
-    console.log("Received data:", data);
+    // Check if response is actually JSON
+    const contentType = response.headers.get("content-type");
+    
+    if (!contentType || !contentType.includes("application/json")) {
+      // Get the text response to see what we actually received
+      const textResponse = await response.text();
+      
+      if (textResponse.includes("<!DOCTYPE") || textResponse.includes("<html")) {
+        throw new Error("Server returned HTML instead of JSON. This usually means the endpoint doesn't exist or requires authentication.");
+      } else {
+        throw new Error(`Expected JSON but received: ${contentType || 'unknown content type'}`);
+      }
+    }
+
+        const data = await response.json();
 
     devicesData = data;
     currentSection = "devices";
@@ -109,8 +121,6 @@ async function loadDevices() {
 async function loadAccountCredentials() {
   try {
     showLoading();
-    console.log(`Attempting to fetch from: ${API_BASE_URL}/accountCredentials`);
-
     const response = await fetch(`${API_BASE_URL}/accountCredentials`, {
       method: "GET",
       headers: {
@@ -120,15 +130,11 @@ async function loadAccountCredentials() {
       mode: "cors",
     });
 
-    console.log("Response status:", response.status);
-    console.log("Response headers:", response.headers);
-
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log("Received data:", data);
 
     accountCredentialsData = data;
     currentSection = "accounts";
@@ -224,7 +230,11 @@ function filterData() {
             item.id.toString().includes(searchTerm) ||
             item.email.toLowerCase().includes(searchTerm) ||
             (item.device_id &&
-              item.device_id.toLowerCase().includes(searchTerm))
+              item.device_id.toLowerCase().includes(searchTerm)) ||
+            (item.coordinate &&
+              item.coordinate.toLowerCase().includes(searchTerm)) ||
+            (item.message &&
+              item.message.toLowerCase().includes(searchTerm))
           );
         case "nearby":
           return (
@@ -241,16 +251,22 @@ function filterData() {
 
 // Get current data based on active section
 function getCurrentData() {
+  let data;
   switch (currentSection) {
     case "devices":
-      return devicesData;
+      data = devicesData;
+      break;
     case "accounts":
-      return accountCredentialsData;
+      data = accountCredentialsData;
+      break;
     case "nearby":
-      return peopleNearbyData;
+      data = peopleNearbyData;
+      break;
     default:
-      return [];
+      data = [];
   }
+  
+  return data;
 }
 
 // Render table with current data
@@ -263,8 +279,22 @@ function renderTable() {
 
   if (pageData.length === 0) {
     const noDataRow = document.createElement("tr");
+    let colSpan;
+    switch (currentSection) {
+      case "devices":
+        colSpan = 3; // ID, Device ID, Actions
+        break;
+      case "accounts":
+        colSpan = 7; // ID, Email, Password, Device ID, Coordinate, Message, Actions
+        break;
+      case "nearby":
+        colSpan = 6; // ID, Profile ID, Account ID, -, -, Actions
+        break;
+      default:
+        colSpan = 6;
+    }
     noDataRow.innerHTML = `
-            <td colspan="6" class="text-center text-muted py-4">
+            <td colspan="${colSpan}" class="text-center text-muted py-4">
                 <i class="fas fa-search fa-2x mb-3"></i>
                 <p>No data found matching your search criteria</p>
             </td>
@@ -281,9 +311,6 @@ function renderTable() {
         row.innerHTML = `
                     <td>${item.id}</td>
                     <td>${item.device_id}</td>
-                    <td>-</td>
-                    <td><span class="status-active">Active</span></td>
-                    <td>-</td>
                     <td>
                         <button class="btn btn-sm btn-outline-primary action-btn" onclick="editItem(${item.id})">
                             <i class="fas fa-edit"></i>
@@ -300,7 +327,8 @@ function renderTable() {
                     <td>${item.email}</td>
                     <td>${item.password ? "••••••••" : "-"}</td>
                     <td>${item.device_id ? item.device_id : "-"}</td>
-                    <td>-</td>
+                    <td>${item.coordinate ? item.coordinate : "-"}</td>
+                    <td>${item.message ? item.message : "-"}</td>
                     <td>
                         <button class="btn btn-sm btn-outline-primary action-btn" onclick="editItem(${
                           item.id
@@ -347,9 +375,6 @@ function updateTableHeaders() {
       thead.innerHTML = `
                 <th>ID</th>
                 <th>Device ID</th>
-                <th>-</th>
-                <th>Status</th>
-                <th>-</th>
                 <th>Actions</th>
             `;
       break;
@@ -359,7 +384,8 @@ function updateTableHeaders() {
                 <th>Email</th>
                 <th>Password</th>
                 <th>Device ID</th>
-                <th>-</th>
+                <th>Coordinate</th>
+                <th>Message</th>
                 <th>Actions</th>
             `;
       break;
@@ -477,121 +503,19 @@ function updateEntriesInfo() {
   totalEntries.textContent = filteredData.length;
 }
 
-// Edit item (placeholder function)
+// Edit item
 function editItem(id) {
-  alert(`Edit item with ID: ${id} in ${currentSection} section`);
-  // Implement your edit functionality here
+  showEditModal(id);
 }
 
-// Delete item (placeholder function)
+// Delete item
 function deleteItem(id) {
-  if (confirm(`Are you sure you want to delete item with ID: ${id}?`)) {
-    // Remove from data
-    switch (currentSection) {
-      case "devices":
-        devicesData = devicesData.filter((item) => item.id !== id);
-        break;
-      case "accounts":
-        accountCredentialsData = accountCredentialsData.filter(
-          (item) => item.id !== id
-        );
-        break;
-      case "nearby":
-        peopleNearbyData = peopleNearbyData.filter((item) => item.id !== id);
-        break;
-    }
-
-    filteredData = filteredData.filter((item) => item.id !== id);
-
-    // Recalculate pagination
-    const totalPages = Math.ceil(filteredData.length / entriesPerPage);
-    if (currentPage > totalPages && totalPages > 0) {
-      currentPage = totalPages;
-    }
-
-    // Update table
-    renderTable();
-    updatePagination();
-    updateEntriesInfo();
-
-    alert("Item deleted successfully!");
-  }
+  showDeleteModal(id);
 }
 
-// Export functionality
-document.addEventListener("DOMContentLoaded", function () {
-  const exportBtn = document.querySelector(".action-buttons .btn:nth-child(2)");
-  exportBtn.addEventListener("click", function () {
-    exportToCSV();
-  });
-});
 
-// Share functionality
-document.addEventListener("DOMContentLoaded", function () {
-  const shareBtn = document.querySelector(".action-buttons .btn:nth-child(1)");
-  shareBtn.addEventListener("click", function () {
-    alert("Share functionality - implement based on your needs");
-  });
-});
 
-// Theme toggle functionality
-document.addEventListener("DOMContentLoaded", function () {
-  const themeBtn = document.querySelector(".floating-action-btn .btn");
-  themeBtn.addEventListener("click", function () {
-    alert("Theme toggle functionality - implement based on your needs");
-  });
-});
 
-// Export to CSV
-function exportToCSV() {
-  const currentData = getCurrentData();
-  if (currentData.length === 0) {
-    alert("No data to export");
-    return;
-  }
-
-  let csvContent = "";
-  let headers = "";
-  let rows = "";
-
-  switch (currentSection) {
-    case "devices":
-      headers = "ID,Device ID\n";
-      rows = currentData
-        .map((item) => `${item.id},${item.device_id}`)
-        .join("\n");
-      break;
-    case "accounts":
-      headers = "ID,Email,Password,Device ID\n";
-      rows = currentData
-        .map(
-          (item) =>
-            `${item.id},${item.email},${item.password || ""},${
-              item.device_id || ""
-            }`
-        )
-        .join("\n");
-      break;
-    case "nearby":
-      headers = "ID,Profile ID,Account ID\n";
-      rows = currentData
-        .map((item) => `${item.id},${item.profile_id},${item.account_id}`)
-        .join("\n");
-      break;
-  }
-
-  csvContent = headers + rows;
-
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-  const link = document.createElement("a");
-  const url = URL.createObjectURL(blob);
-  link.setAttribute("href", url);
-  link.setAttribute("download", `${currentSection}_data.csv`);
-  link.style.visibility = "hidden";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-}
 
 // Loading states
 function showLoading() {
@@ -605,7 +529,27 @@ function hideLoading() {
 }
 
 function showError(message) {
-  alert(message); // You can replace this with a better error display
+  // Create a better error display
+  const errorDiv = document.createElement('div');
+  errorDiv.className = 'alert alert-danger alert-dismissible fade show';
+  errorDiv.style.position = 'fixed';
+  errorDiv.style.top = '20px';
+  errorDiv.style.right = '20px';
+  errorDiv.style.zIndex = '9999';
+  errorDiv.style.minWidth = '400px';
+  errorDiv.innerHTML = `
+    <strong>Error:</strong> ${message}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  `;
+  
+  document.body.appendChild(errorDiv);
+  
+  // Auto-remove after 10 seconds
+  setTimeout(() => {
+    if (errorDiv.parentNode) {
+      errorDiv.parentNode.removeChild(errorDiv);
+    }
+  }, 10000);
 }
 
 // Refresh current data
@@ -621,4 +565,320 @@ function refreshData() {
       loadPeopleNearby();
       break;
   }
+}
+
+// Modal management
+// Show create modal
+function showCreateModal() {
+  isEditMode = false;
+  currentEditId = null;
+  
+  // Reset form
+  document.getElementById('createEditForm').reset();
+  document.getElementById('editItemId').value = '';
+  
+  // Update modal title
+  document.getElementById('createEditModalLabel').textContent = `Create New ${getCurrentSectionTitle()}`;
+  
+  // Show appropriate form based on current section
+  showCurrentSectionForm();
+  
+  // Load device IDs for account credentials if needed
+  if (currentSection === 'accounts') {
+    loadDeviceIds();
+  }
+  
+  // Show modal
+  const modal = new bootstrap.Modal(document.getElementById('createEditModal'));
+  modal.show();
+}
+
+// Show edit modal
+function showEditModal(id) {
+  isEditMode = true;
+  currentEditId = id;
+  
+  // Get current item data
+  const currentData = getCurrentData();
+  const item = currentData.find(item => item.id === id);
+  
+  if (!item) {
+    showError('Item not found');
+    return;
+  }
+  
+  // Update modal title
+  document.getElementById('createEditModalLabel').textContent = `Edit ${getCurrentSectionTitle()}`;
+  
+  // Show appropriate form based on current section
+  showCurrentSectionForm();
+  
+  // Populate form with current data
+  populateFormWithData(item);
+  
+  // Load device IDs for account credentials if needed
+  if (currentSection === 'accounts') {
+    loadDeviceIds();
+  }
+  
+  // Show modal
+  const modal = new bootstrap.Modal(document.getElementById('createEditModal'));
+  modal.show();
+}
+
+// Show current section form
+function showCurrentSectionForm() {
+  // Hide all forms
+  document.getElementById('devicesForm').style.display = 'none';
+  document.getElementById('accountsForm').style.display = 'none';
+  document.getElementById('nearbyForm').style.display = 'none';
+  
+  // Show current section form
+  switch (currentSection) {
+    case 'devices':
+      document.getElementById('devicesForm').style.display = 'block';
+      break;
+    case 'accounts':
+      document.getElementById('accountsForm').style.display = 'block';
+      break;
+    case 'nearby':
+      document.getElementById('nearbyForm').style.display = 'block';
+      break;
+  }
+}
+
+// Get current section title
+function getCurrentSectionTitle() {
+  switch (currentSection) {
+    case 'devices':
+      return 'Device';
+    case 'accounts':
+      return 'Account Credential';
+    case 'nearby':
+      return 'Person Nearby';
+    default:
+      return 'Item';
+  }
+}
+
+// Populate form with data
+function populateFormWithData(item) {
+  switch (currentSection) {
+    case 'devices':
+      document.getElementById('deviceId').value = item.device_id || '';
+      break;
+    case 'accounts':
+      document.getElementById('email').value = item.email || '';
+      document.getElementById('password').value = item.password || '';
+      document.getElementById('deviceIdSelect').value = item.device_id || '';
+      document.getElementById('coordinate').value = item.coordinate || '';
+      document.getElementById('message').value = item.message || '';
+      break;
+    case 'nearby':
+      document.getElementById('profileId').value = item.profile_id || '';
+      document.getElementById('accountId').value = item.account_id || '';
+      break;
+  }
+}
+
+// Load device IDs for account credentials
+async function loadDeviceIds() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/devices`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      mode: 'cors',
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const devices = await response.json();
+    const select = document.getElementById('deviceIdSelect');
+    
+    // Clear existing options
+    select.innerHTML = '<option value="">Select Device ID</option>';
+    
+    // Add device options
+    devices.forEach(device => {
+      const option = document.createElement('option');
+      option.value = device.device_id;
+      option.textContent = device.device_id;
+      select.appendChild(option);
+    });
+    
+  } catch (error) {
+    console.error('Failed to load device IDs:', error);
+  }
+}
+
+// Save item (create or update)
+async function saveItem() {
+  try {
+    let data = {};
+    let endpoint = '';
+    let method = 'POST';
+    
+    if (isEditMode) {
+      method = 'PUT';
+      endpoint = `/${currentSection === 'accounts' ? 'accountCredentials' : currentSection}/${currentEditId}`;
+    } else {
+      endpoint = `/${currentSection === 'accounts' ? 'accountCredentials' : currentSection}`;
+    }
+    
+    // Build data object based on current section
+    switch (currentSection) {
+      case 'devices':
+        data = {
+          device_id: document.getElementById('deviceId').value
+        };
+        break;
+      case 'accounts':
+        data = {
+          email: document.getElementById('email').value,
+          password: document.getElementById('password').value,
+          device_id: document.getElementById('deviceIdSelect').value,
+          coordinate: document.getElementById('coordinate').value,
+          message: document.getElementById('message').value
+        };
+        break;
+      case 'nearby':
+        data = {
+          profile_id: parseInt(document.getElementById('profileId').value),
+          account_id: parseInt(document.getElementById('accountId').value)
+        };
+        break;
+    }
+    
+    // Validate required fields
+    if (!validateForm(data)) {
+      return;
+    }
+    
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: method,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+      mode: 'cors',
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    // Close modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('createEditModal'));
+    modal.hide();
+    
+    // Show success message
+    showSuccess(result.message || 'Item saved successfully');
+    
+    // Refresh data from API
+    await refreshData();
+    
+  } catch (error) {
+    console.error('Failed to save item:', error);
+    showError(`Failed to save item: ${error.message}`);
+  }
+}
+
+// Validate form data
+function validateForm(data) {
+  switch (currentSection) {
+    case 'devices':
+      if (!data.device_id) {
+        showError('Device ID is required');
+        return false;
+      }
+      break;
+    case 'accounts':
+      if (!data.email || !data.password) {
+        showError('Email and password are required');
+        return false;
+      }
+      break;
+    case 'nearby':
+      if (!data.profile_id || !data.account_id) {
+        showError('Profile ID and Account ID are required');
+        return false;
+      }
+      break;
+  }
+  return true;
+}
+
+// Show delete confirmation modal
+function showDeleteModal(id) {
+  document.getElementById('deleteItemId').textContent = id;
+  const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+  modal.show();
+}
+
+// Confirm delete
+async function confirmDelete() {
+  try {
+    const id = document.getElementById('deleteItemId').textContent;
+    
+    const response = await fetch(`${API_BASE_URL}/${currentSection === 'accounts' ? 'accountCredentials' : currentSection}/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      mode: 'cors',
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    // Close modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('deleteModal'));
+    modal.hide();
+    
+    // Show success message
+    showSuccess(result.message || 'Item deleted successfully');
+    
+    // Refresh data from API instead of just removing from local arrays
+    await refreshData();
+    
+  } catch (error) {
+    console.error('Failed to delete item:', error);
+    showError(`Failed to delete item: ${error.message}`);
+  }
+}
+
+// Show success message
+function showSuccess(message) {
+  const successDiv = document.createElement('div');
+  successDiv.className = 'alert alert-success alert-dismissible fade show';
+  successDiv.style.position = 'fixed';
+  successDiv.style.top = '20px';
+  successDiv.style.right = '20px';
+  successDiv.style.zIndex = '9999';
+  successDiv.style.minWidth = '400px';
+  successDiv.innerHTML = `
+    <strong>Success:</strong> ${message}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  `;
+  
+  document.body.appendChild(successDiv);
+  
+  // Auto-remove after 5 seconds
+  setTimeout(() => {
+    if (successDiv.parentNode) {
+      successDiv.parentNode.removeChild(successDiv);
+    }
+  }, 5000);
 }

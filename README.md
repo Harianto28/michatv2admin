@@ -14,15 +14,64 @@ A responsive dashboard application built with Bootstrap that connects to your AP
 - **Status Badges**: Color-coded status indicators
 - **Action Buttons**: Edit and delete functionality for each row
 - **Modern UI**: Clean, professional design matching the original dashboard
-- **CSV Export**: Export data to CSV format
 
-## API Endpoints
+## ⚠️ IMPORTANT: Setup Required
 
-The dashboard integrates with the following API endpoints:
+**Before using this dashboard, you MUST configure your API endpoint URL!**
 
-- **`GET /devices`** - Fetch all devices (id, device_id)
-- **`GET /accountCredentials`** - Fetch account credentials (id, email, password, device_id)
-- **`GET /peopleNearbyCredentials`** - Fetch people nearby (id, profile_id, account_id)
+## Setup Instructions
+
+### 1. Configure API Endpoint
+
+**CRITICAL STEP**: Open `script.js` and update the `API_BASE_URL` constant:
+
+```javascript
+// Find this line in script.js (around line 2)
+const API_BASE_URL = "http://localhost:3031";
+
+// Change it to match your actual API server URL
+const API_BASE_URL = "https://your-api-domain.com";
+// OR for local development:
+const API_BASE_URL = "http://localhost:3000";
+// OR for ngrok:
+const API_BASE_URL = "https://your-ngrok-url.ngrok-free.app";
+```
+
+**Examples of common API URLs:**
+- **Local development**: `http://localhost:3000`
+- **Local with different port**: `http://localhost:8080`
+- **Ngrok tunnel**: `https://abc123.ngrok-free.app`
+- **Production server**: `https://api.yourcompany.com`
+- **IP address**: `http://192.168.1.100:3000`
+
+### 2. Verify API Endpoints
+
+Ensure your API server has these endpoints available:
+
+- **`GET /devices`** - Returns list of devices
+- **`GET /accountCredentials`** - Returns account credentials with coordinates and messages
+- **`GET /peopleNearbyCredentials`** - Returns people nearby data
+
+### 3. Test API Connection
+
+Before opening the dashboard, test your API endpoints:
+
+```bash
+# Test devices endpoint
+curl https://your-api-domain.com/devices
+
+# Test account credentials endpoint  
+curl https://your-api-domain.com/accountCredentials
+
+# Test people nearby endpoint
+curl https://your-api-domain.com/peopleNearbyCredentials
+```
+
+### 4. Open the Dashboard
+
+1. **Open `index.html`** in your web browser
+2. **Check browser console** for any connection errors
+3. **Click on different sections** to test data loading
 
 ## File Structure
 
@@ -34,19 +83,21 @@ michatv2-admin/
 └── README.md           # This file
 ```
 
-## Getting Started
+## API Endpoints
 
-1. **Open the Dashboard**: Simply open `index.html` in your web browser
-2. **API Connection**: The dashboard will automatically connect to your API at `https://3ba753b7a9c1.ngrok-free.app`
-3. **Data Loading**: Data is fetched from your API endpoints when you click on each section
+The dashboard integrates with the following API endpoints:
+
+- **`GET /devices`** - Fetch all devices (id, device_id)
+- **`GET /accountCredentials`** - Fetch account credentials (id, email, password, device_id, coordinate, message)
+- **`GET /peopleNearbyCredentials`** - Fetch people nearby (id, profile_id, account_id)
 
 ## Usage
 
 ### Navigation
 
-- **Devices**: View all registered devices with their IDs
-- **Account Credentials**: View user accounts with email, password, and associated device IDs
-- **People Nearby**: View people nearby credentials with profile and account IDs
+- **Devices**: View all registered devices with their IDs (3 columns: ID, Device ID, Actions)
+- **Account Credentials**: View user accounts with email, password, device ID, coordinates, and messages (7 columns)
+- **People Nearby**: View people nearby credentials with profile and account IDs (6 columns)
 
 ### Search
 
@@ -69,18 +120,36 @@ michatv2-admin/
 
 - **Edit**: Click the edit button (pencil icon) to modify a record
 - **Delete**: Click the delete button (trash icon) to remove a record
-- **Export**: Click the Export button to download data as CSV
 - **Refresh**: Use the Refresh Data button in the sidebar to reload current data
 
 ## API Configuration
 
-The dashboard is configured to connect to your API at:
+### Current Configuration
+
+The dashboard is currently configured to connect to:
 
 ```javascript
-const API_BASE_URL = "https://3ba753b7a9c1.ngrok-free.app";
+const API_BASE_URL = "http://localhost:3031";
 ```
 
-### Data Structure
+### How to Change API URL
+
+1. **Open `script.js`** in any text editor
+2. **Find line 2** where `API_BASE_URL` is defined
+3. **Replace the URL** with your actual API server address
+4. **Save the file** and refresh your browser
+
+### Common API URL Patterns
+
+| Development Type | Example URL | When to Use |
+|------------------|-------------|-------------|
+| Local Development | `http://localhost:3000` | Running API on your machine |
+| Local with Port | `http://localhost:8080` | API running on different port |
+| Ngrok Tunnel | `https://abc123.ngrok-free.app` | Exposing local API to internet |
+| Production | `https://api.yourcompany.com` | Live production server |
+| IP Address | `http://192.168.1.100:3000` | API on local network |
+
+## Data Structure
 
 **Devices:**
 
@@ -98,7 +167,9 @@ const API_BASE_URL = "https://3ba753b7a9c1.ngrok-free.app";
   "id": 1,
   "email": "user@example.com",
   "password": "hashedpassword",
-  "device_id": "device123"
+  "device_id": "device123",
+  "coordinate": "-7.2504,112.7688",
+  "message": "Hello! Nice to meet you!"
 }
 ```
 
@@ -195,20 +266,27 @@ The dashboard automatically adapts to different screen sizes:
 
 1. **API Connection Failed**
 
+   - **Check your API_BASE_URL** in `script.js` - this is the most common issue!
    - Check if your API server is running
-   - Verify the API_BASE_URL in script.js
+   - Verify the API endpoint URLs are correct
    - Check browser console for CORS errors
 
 2. **Data Not Loading**
 
+   - **Verify API_BASE_URL** is pointing to the correct server
    - Check browser console for error messages
-   - Verify API endpoint responses
+   - Test API endpoints directly with curl or Postman
    - Check network tab for failed requests
 
 3. **Search Not Working**
    - Ensure data is loaded before searching
    - Check if search input field exists
    - Verify JavaScript console for errors
+
+4. **Coordinates and Messages Not Showing**
+   - Verify your API returns the `coordinate` and `message` fields
+   - Check that field names match exactly (case-sensitive)
+   - Ensure API response includes all expected data
 
 ### Debug Mode
 
@@ -218,14 +296,39 @@ Enable debug logging by adding this to the browser console:
 localStorage.setItem("debug", "true");
 ```
 
+### Testing Your API
+
+Before using the dashboard, test your API endpoints:
+
+```bash
+# Test with curl
+curl https://your-api-domain.com/accountCredentials
+
+# Test with browser
+# Open: https://your-api-domain.com/accountCredentials
+# Should return JSON data, not HTML
+```
+
 ## Support
 
 For questions or issues:
 
-1. Check the browser console for JavaScript errors
-2. Verify all files are in the same directory
-3. Ensure your API endpoints are accessible
-4. Check network connectivity to your API server
+1. **First**: Check that your `API_BASE_URL` is correct in `script.js`
+2. Check the browser console for JavaScript errors
+3. Verify all files are in the same directory
+4. Ensure your API endpoints are accessible
+5. Check network connectivity to your API server
+6. Test API endpoints directly to ensure they return data
+
+## Quick Start Checklist
+
+- [ ] Update `API_BASE_URL` in `script.js`
+- [ ] Verify your API server is running
+- [ ] Test API endpoints with curl or browser
+- [ ] Open `index.html` in browser
+- [ ] Check browser console for errors
+- [ ] Click on "Account Credentials" to test data loading
+- [ ] Verify coordinates and messages are displayed
 
 ## License
 
