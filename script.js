@@ -1,9 +1,32 @@
 // API Configuration
-const API_BASE_URL = "http://localhost:3031";
+const API_BASE_URL = CONFIG.API_BASE_URL;
+
+// Authentication middleware
+function checkAuth() {
+  const token = localStorage.getItem('authToken');
+  const userData = localStorage.getItem('userData');
+  
+  if (!token || !userData) {
+    // Not authenticated, redirect to login
+    window.location.href = 'login.html';
+    return false;
+  }
+  
+  return true;
+}
+
+// Logout function
+function logout() {
+  localStorage.removeItem('authToken');
+  localStorage.removeItem('userData');
+  window.location.href = 'login.html';
+}
 
 // Data structures matching your API
 let devicesData = [];
 let accountCredentialsData = [];
+let coordinatesData = [];
+let messagesData = [];
 
 // Table state
 let currentPage = 1;
@@ -28,6 +51,11 @@ const sectionTitle = document.getElementById("sectionTitle");
 
 // Initialize the dashboard
 document.addEventListener("DOMContentLoaded", function () {
+  // Check authentication first
+  if (!checkAuth()) {
+    return;
+  }
+  
   setupEventListeners();
   loadDevices(); // Start with devices section
 });
@@ -164,6 +192,124 @@ async function loadAccountCredentials() {
   }
 }
 
+// Load coordinates data
+async function loadCoordinates() {
+  try {
+    showLoading();
+    const response = await fetch(`${API_BASE_URL}/coordinates`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      mode: "cors",
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    // Ensure data is an array
+    if (!Array.isArray(data)) {
+      console.warn("API returned non-array data for coordinates:", data);
+      coordinatesData = [];
+    } else {
+      coordinatesData = data;
+    }
+    
+    currentSection = "coordinates";
+    filteredData = [...coordinatesData];
+    updateSectionTitle("Coordinates");
+    updateTableHeaders();
+    renderTable();
+    updatePagination();
+    updateEntriesInfo();
+    updateActiveNav("coordinates");
+    hideLoading();
+  } catch (error) {
+    console.error("Detailed error loading coordinates:", error);
+    console.error("Error name:", error.name);
+    console.error("Error message:", error.message);
+
+    // Set empty array on error
+    coordinatesData = [];
+    filteredData = [];
+
+    if (
+      error.name === "TypeError" &&
+      error.message.includes("Failed to fetch")
+    ) {
+      showError(
+        `CORS Error: Cannot connect to ${API_BASE_URL}/coordinates. Check if CORS is properly configured on your server.`
+      );
+    } else {
+      showError(`Failed to load coordinates data: ${error.message}`);
+    }
+    hideLoading();
+  }
+}
+
+// Load messages data
+async function loadMessages() {
+  try {
+    showLoading();
+    const response = await fetch(`${API_BASE_URL}/messages`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      mode: "cors",
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    // Ensure data is an array
+    if (!Array.isArray(data)) {
+      console.warn("API returned non-array data for messages:", data);
+      messagesData = [];
+    } else {
+      messagesData = data;
+    }
+    
+    currentSection = "messages";
+    filteredData = [...messagesData];
+    updateSectionTitle("Messages");
+    updateTableHeaders();
+    renderTable();
+    updatePagination();
+    updateEntriesInfo();
+    updateActiveNav("messages");
+    hideLoading();
+  } catch (error) {
+    console.error("Detailed error loading messages:", error);
+    console.error("Error name:", error.name);
+    console.error("Error message:", error.message);
+
+    // Set empty array on error
+    messagesData = [];
+    filteredData = [];
+
+    if (
+      error.name === "TypeError" &&
+      error.message.includes("Failed to fetch")
+    ) {
+      showError(
+        `CORS Error: Cannot connect to ${API_BASE_URL}/messages. Check if CORS is properly configured on your server.`
+      );
+    } else {
+      showError(`Failed to load messages data: ${error.message}`);
+    }
+    hideLoading();
+  }
+}
+
 // Update section title
 function updateSectionTitle(title) {
   if (sectionTitle) {
@@ -197,18 +343,25 @@ function filterData() {
         case "devices":
           return (
             item.id.toString().includes(searchTerm) ||
-            item.device_id.toLowerCase().includes(searchTerm)
+            item.device_id.toLowerCase().includes(searchTerm) ||
+            (item.name && item.name.toLowerCase().includes(searchTerm))
           );
         case "accounts":
           return (
             item.id.toString().includes(searchTerm) ||
             item.email.toLowerCase().includes(searchTerm) ||
             (item.device_id &&
-              item.device_id.toLowerCase().includes(searchTerm)) ||
-            (item.coordinate &&
-              item.coordinate.toLowerCase().includes(searchTerm)) ||
-            (item.message &&
-              item.message.toLowerCase().includes(searchTerm))
+              item.device_id.toLowerCase().includes(searchTerm))
+          );
+        case "coordinates":
+          return (
+            item.id.toString().includes(searchTerm) ||
+            item.coordinate.toLowerCase().includes(searchTerm)
+          );
+        case "messages":
+          return (
+            item.id.toString().includes(searchTerm) ||
+            item.message.toLowerCase().includes(searchTerm)
           );
         default:
           return false;
@@ -226,6 +379,12 @@ function getCurrentData() {
       break;
     case "accounts":
       data = accountCredentialsData;
+      break;
+    case "coordinates":
+      data = coordinatesData;
+      break;
+    case "messages":
+      data = messagesData;
       break;
     default:
       data = [];
@@ -247,10 +406,16 @@ function renderTable() {
     let colSpan;
     switch (currentSection) {
       case "devices":
-        colSpan = 3; // ID, Device ID, Actions
+        colSpan = 4; // ID, Device ID, Name, Actions
         break;
       case "accounts":
-        colSpan = 7; // ID, Email, Password, Device ID, Coordinate, Message, Actions
+        colSpan = 5; // ID, Email, Password, Device ID, Actions
+        break;
+      case "coordinates":
+        colSpan = 3; // ID, Coordinate, Actions
+        break;
+      case "messages":
+        colSpan = 3; // ID, Message, Actions
         break;
       default:
         colSpan = 6;
@@ -265,14 +430,16 @@ function renderTable() {
     return;
   }
 
-  pageData.forEach((item) => {
+  pageData.forEach((item, index) => {
     const row = document.createElement("tr");
+    const rowNumber = (currentPage - 1) * entriesPerPage + index + 1;
 
     switch (currentSection) {
       case "devices":
         row.innerHTML = `
-                    <td>${item.id}</td>
+                    <td>${rowNumber}</td>
                     <td>${item.device_id}</td>
+                    <td>${item.name || "-"}</td>
                     <td>
                         <button class="btn btn-sm btn-outline-primary action-btn" onclick="editItem(${item.id})">
                             <i class="fas fa-edit"></i>
@@ -285,12 +452,10 @@ function renderTable() {
         break;
       case "accounts":
         row.innerHTML = `
-                    <td>${item.id}</td>
+                    <td>${rowNumber}</td>
                     <td>${item.email}</td>
                     <td>${item.password ? "••••••••" : "-"}</td>
-                    <td>${item.device_id ? item.device_id : "-"}</td>
-                    <td>${item.coordinate ? item.coordinate : "-"}</td>
-                    <td>${item.message ? item.message : "-"}</td>
+                    <td>${item.device_name ? item.device_name : (item.device_id ? item.device_id : "-")}</td>
                     <td>
                         <button class="btn btn-sm btn-outline-primary action-btn" onclick="editItem(${
                           item.id
@@ -300,6 +465,34 @@ function renderTable() {
                         <button class="btn btn-sm btn-outline-danger action-btn" onclick="deleteItem(${
                           item.id
                         })">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                `;
+        break;
+      case "coordinates":
+        row.innerHTML = `
+                    <td>${rowNumber}</td>
+                    <td>${item.coordinate}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary action-btn" onclick="editItem(${item.id})">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger action-btn" onclick="deleteItem(${item.id})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                `;
+        break;
+      case "messages":
+        row.innerHTML = `
+                    <td>${rowNumber}</td>
+                    <td>${item.message}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary action-btn" onclick="editItem(${item.id})">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger action-btn" onclick="deleteItem(${item.id})">
                             <i class="fas fa-trash"></i>
                         </button>
                     </td>
@@ -318,18 +511,31 @@ function updateTableHeaders() {
   switch (currentSection) {
     case "devices":
       thead.innerHTML = `
-                <th>ID</th>
+                <th>No.</th>
                 <th>Device ID</th>
+                <th>Name</th>
                 <th>Actions</th>
             `;
       break;
     case "accounts":
       thead.innerHTML = `
-                <th>ID</th>
+                <th>No.</th>
                 <th>Email</th>
                 <th>Password</th>
-                <th>Device ID</th>
+                <th>Device Name</th>
+                <th>Actions</th>
+            `;
+      break;
+    case "coordinates":
+      thead.innerHTML = `
+                <th>No.</th>
                 <th>Coordinate</th>
+                <th>Actions</th>
+            `;
+      break;
+    case "messages":
+      thead.innerHTML = `
+                <th>No.</th>
                 <th>Message</th>
                 <th>Actions</th>
             `;
@@ -496,6 +702,12 @@ function refreshData() {
     case "accounts":
       loadAccountCredentials();
       break;
+    case "coordinates":
+      loadCoordinates();
+      break;
+    case "messages":
+      loadMessages();
+      break;
   }
 }
 
@@ -563,6 +775,8 @@ function showCurrentSectionForm() {
   // Hide all forms
   document.getElementById('devicesForm').style.display = 'none';
   document.getElementById('accountsForm').style.display = 'none';
+  document.getElementById('coordinatesForm').style.display = 'none';
+  document.getElementById('messagesForm').style.display = 'none';
   
   // Show current section form
   switch (currentSection) {
@@ -571,6 +785,12 @@ function showCurrentSectionForm() {
       break;
     case 'accounts':
       document.getElementById('accountsForm').style.display = 'block';
+      break;
+    case 'coordinates':
+      document.getElementById('coordinatesForm').style.display = 'block';
+      break;
+    case 'messages':
+      document.getElementById('messagesForm').style.display = 'block';
       break;
   }
 }
@@ -582,6 +802,10 @@ function getCurrentSectionTitle() {
       return 'Device';
     case 'accounts':
       return 'Account Credential';
+    case 'coordinates':
+      return 'Coordinate';
+    case 'messages':
+      return 'Message';
     default:
       return 'Item';
   }
@@ -592,13 +816,18 @@ function populateFormWithData(item) {
   switch (currentSection) {
     case 'devices':
       document.getElementById('deviceId').value = item.device_id || '';
+      document.getElementById('deviceName').value = item.name || '';
       break;
     case 'accounts':
       document.getElementById('email').value = item.email || '';
       document.getElementById('password').value = item.password || '';
       document.getElementById('deviceIdSelect').value = item.device_id || '';
-      document.getElementById('coordinate').value = item.coordinate || '';
-      document.getElementById('message').value = item.message || '';
+      break;
+    case 'coordinates':
+      document.getElementById('coordinateInput').value = item.coordinate || '';
+      break;
+    case 'messages':
+      document.getElementById('messageInput').value = item.message || '';
       break;
   }
 }
@@ -629,7 +858,7 @@ async function loadDeviceIds() {
     devices.forEach(device => {
       const option = document.createElement('option');
       option.value = device.device_id;
-      option.textContent = device.device_id;
+      option.textContent = device.name || device.device_id; // Show name if available, fallback to device_id
       select.appendChild(option);
     });
     
@@ -656,16 +885,25 @@ async function saveItem() {
     switch (currentSection) {
       case 'devices':
         data = {
-          device_id: document.getElementById('deviceId').value
+          device_id: document.getElementById('deviceId').value,
+          name: document.getElementById('deviceName').value
         };
         break;
       case 'accounts':
         data = {
           email: document.getElementById('email').value,
           password: document.getElementById('password').value,
-          device_id: document.getElementById('deviceIdSelect').value,
-          coordinate: document.getElementById('coordinate').value,
-          message: document.getElementById('message').value
+          device_id: document.getElementById('deviceIdSelect').value
+        };
+        break;
+      case 'coordinates':
+        data = {
+          coordinate: document.getElementById('coordinateInput').value
+        };
+        break;
+      case 'messages':
+        data = {
+          message: document.getElementById('messageInput').value
         };
         break;
     }
@@ -722,13 +960,53 @@ function validateForm(data) {
         return false;
       }
       break;
+    case 'coordinates':
+      if (!data.coordinate) {
+        showError('Coordinate is required');
+        return false;
+      }
+      break;
+    case 'messages':
+      if (!data.message) {
+        showError('Message is required');
+        return false;
+      }
+      break;
   }
   return true;
 }
 
 // Show delete confirmation modal
 function showDeleteModal(id) {
-  document.getElementById('deleteItemId').textContent = id;
+  // Get current item data
+  const currentData = getCurrentData();
+  const item = currentData.find(item => item.id === id);
+  
+  if (!item) {
+    showError('Item not found');
+    return;
+  }
+  
+  // Create meaningful description based on current section
+  let itemDescription = '';
+  switch (currentSection) {
+    case 'devices':
+      itemDescription = `Device ID: ${item.device_id}, Name: ${item.name || 'N/A'}`;
+      break;
+    case 'accounts':
+      itemDescription = `Email: ${item.email}, Device: ${item.device_name || item.device_id || 'N/A'}`;
+      break;
+    case 'coordinates':
+      itemDescription = `Coordinate: ${item.coordinate}`;
+      break;
+    case 'messages':
+      itemDescription = `Message: ${item.message}`;
+      break;
+  }
+  
+  // Store the actual ID for the delete operation
+  document.getElementById('deleteItemId').setAttribute('data-item-id', id);
+  document.getElementById('deleteItemId').textContent = itemDescription;
   const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
   modal.show();
 }
@@ -736,7 +1014,7 @@ function showDeleteModal(id) {
 // Confirm delete
 async function confirmDelete() {
   try {
-    const id = document.getElementById('deleteItemId').textContent;
+    const id = document.getElementById('deleteItemId').getAttribute('data-item-id');
     
     const response = await fetch(`${API_BASE_URL}/${currentSection === 'accounts' ? 'accountCredentials' : currentSection}/${id}`, {
       method: 'DELETE',
@@ -791,4 +1069,175 @@ function showSuccess(message) {
       successDiv.parentNode.removeChild(successDiv);
     }
   }, 5000);
+}
+
+// Batch Insert Functions
+function showBatchInsertModal() {
+  // Reset form
+  document.getElementById('batchData').value = '';
+  
+  // Update modal title based on current section
+  const sectionTitle = getCurrentSectionTitle();
+  document.getElementById('batchInsertModalLabel').textContent = `Batch Insert ${sectionTitle}s`;
+  
+  // Update placeholder based on current section
+  const batchDataTextarea = document.getElementById('batchData');
+  switch (currentSection) {
+    case 'devices':
+      batchDataTextarea.placeholder = `device001,Device One
+device002,Device Two
+device003,Device Three
+(device_id,name - both are required)`;
+      break;
+    case 'accounts':
+      batchDataTextarea.placeholder = `user1@example.com,password123,device001
+user2@example.com,password456,device002
+user3@example.com,password789,device003
+(email,password,device_id - all are required)`;
+      break;
+    case 'coordinates':
+      batchDataTextarea.placeholder = `40.7128,-74.0060
+34.0522,-118.2437
+41.8781,-87.6298
+(one coordinate per line)`;
+      break;
+    case 'messages':
+      batchDataTextarea.placeholder = `Hello, this is message 1
+Welcome to our system
+Thank you for using our service
+(one message per line)`;
+      break;
+  }
+  
+  // Show modal
+  const modal = new bootstrap.Modal(document.getElementById('batchInsertModal'));
+  modal.show();
+}
+
+function addSampleData() {
+  const batchData = document.getElementById('batchData');
+  let sampleData = '';
+  
+  switch (currentSection) {
+    case 'devices':
+      sampleData = `device001,Device One
+device002,Device Two
+device003,Device Three`;
+      break;
+    case 'accounts':
+      sampleData = `user1@example.com,password123,device001
+user2@example.com,password456,device002
+user3@example.com,password789,device003`;
+      break;
+    case 'coordinates':
+      sampleData = `40.7128,-74.0060
+34.0522,-118.2437
+41.8781,-87.6298`;
+      break;
+    case 'messages':
+      sampleData = `Hello, this is message 1
+Welcome to our system
+Thank you for using our service`;
+      break;
+  }
+  
+  batchData.value = sampleData;
+}
+
+async function processBatchInsert() {
+  try {
+    const batchData = document.getElementById('batchData').value.trim();
+    if (!batchData) {
+      showError('Please enter some data to insert');
+      return;
+    }
+    
+    const lines = batchData.split('\n').filter(line => line.trim() !== '');
+    if (lines.length === 0) {
+      showError('No valid data found');
+      return;
+    }
+    
+    let endpoint = '';
+    let data = {};
+    
+    switch (currentSection) {
+      case 'devices':
+        endpoint = '/devices/batch';
+        const devices = lines.map(line => {
+          const parts = line.split(',').map(part => part.trim());
+          if (parts.length < 2) {
+            throw new Error(`Invalid device format: ${line}. Expected: device_id,name`);
+          }
+          return {
+            device_id: parts[0],
+            name: parts[1]
+          };
+        });
+        data = { devices };
+        break;
+        
+      case 'accounts':
+        endpoint = '/accountCredentials/batch';
+        const credentials = lines.map(line => {
+          const parts = line.split(',').map(part => part.trim());
+          if (parts.length < 3) {
+            throw new Error(`Invalid credential format: ${line}. Expected: email,password,device_id`);
+          }
+          return {
+            email: parts[0],
+            password: parts[1],
+            device_id: parts[2]
+          };
+        });
+        data = { credentials };
+        break;
+        
+      case 'coordinates':
+        endpoint = '/coordinates/batch';
+        const coordinates = lines.map(line => ({
+          coordinate: line.trim()
+        }));
+        data = { coordinates };
+        break;
+        
+      case 'messages':
+        endpoint = '/messages/batch';
+        const messages = lines.map(line => ({
+          message: line.trim()
+        }));
+        data = { messages };
+        break;
+    }
+    
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+      mode: 'cors',
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    // Close modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('batchInsertModal'));
+    modal.hide();
+    
+    // Show success message
+    showSuccess(`${result.count} ${getCurrentSectionTitle()}s created successfully`);
+    
+    // Refresh data from API
+    await refreshData();
+    
+  } catch (error) {
+    console.error('Failed to process batch insert:', error);
+    showError(`Failed to process batch insert: ${error.message}`);
+  }
 }

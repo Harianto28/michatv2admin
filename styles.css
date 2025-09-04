@@ -21,6 +21,16 @@
   font-weight: 600;
 }
 
+.top-bar .btn-outline-light {
+  border-color: rgba(255, 255, 255, 0.5);
+  color: white;
+}
+
+.top-bar .btn-outline-light:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: white;
+}
+
 /* Dashboard Content */
 .dashboard-content {
   display: flex;

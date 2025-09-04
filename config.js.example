@@ -1,0 +1,7 @@
+// Shared Configuration
+const CONFIG = {
+  API_BASE_URL: "your_api_url",
+};
+
+// Make it available globally
+window.CONFIG = CONFIG;
