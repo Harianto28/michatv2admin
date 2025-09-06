@@ -3,23 +3,23 @@ const API_BASE_URL = CONFIG.API_BASE_URL;
 
 // Authentication middleware
 function checkAuth() {
-  const token = localStorage.getItem('authToken');
-  const userData = localStorage.getItem('userData');
-  
+  const token = localStorage.getItem("authToken");
+  const userData = localStorage.getItem("userData");
+
   if (!token || !userData) {
     // Not authenticated, redirect to login
-    window.location.href = 'login.html';
+    window.location.href = "login.html";
     return false;
   }
-  
+
   return true;
 }
 
 // Logout function
 function logout() {
-  localStorage.removeItem('authToken');
-  localStorage.removeItem('userData');
-  window.location.href = 'login.html';
+  localStorage.removeItem("authToken");
+  localStorage.removeItem("userData");
+  window.location.href = "login.html";
 }
 
 // Data structures matching your API
@@ -55,7 +55,7 @@ document.addEventListener("DOMContentLoaded", function () {
   if (!checkAuth()) {
     return;
   }
-  
+
   setupEventListeners();
   loadDevices(); // Start with devices section
 });
@@ -101,21 +101,35 @@ async function loadDevices() {
 
     // Check if response is actually JSON
     const contentType = response.headers.get("content-type");
-    
+
     if (!contentType || !contentType.includes("application/json")) {
       // Get the text response to see what we actually received
       const textResponse = await response.text();
-      
-      if (textResponse.includes("<!DOCTYPE") || textResponse.includes("<html")) {
-        throw new Error("Server returned HTML instead of JSON. This usually means the endpoint doesn't exist or requires authentication.");
+
+      if (
+        textResponse.includes("<!DOCTYPE") ||
+        textResponse.includes("<html")
+      ) {
+        throw new Error(
+          "Server returned HTML instead of JSON. This usually means the endpoint doesn't exist or requires authentication."
+        );
       } else {
-        throw new Error(`Expected JSON but received: ${contentType || 'unknown content type'}`);
+        throw new Error(
+          `Expected JSON but received: ${contentType || "unknown content type"}`
+        );
       }
     }
 
-        const data = await response.json();
+    const data = await response.json();
 
-    devicesData = data;
+    // Ensure data is an array
+    if (!Array.isArray(data)) {
+      console.warn("API returned non-array data for devices:", data);
+      devicesData = [];
+    } else {
+      devicesData = data;
+    }
+
     currentSection = "devices";
     filteredData = [...devicesData];
     updateSectionTitle("Devices");
@@ -163,7 +177,17 @@ async function loadAccountCredentials() {
 
     const data = await response.json();
 
-    accountCredentialsData = data;
+    // Ensure data is an array
+    if (!Array.isArray(data)) {
+      console.warn(
+        "API returned non-array data for account credentials:",
+        data
+      );
+      accountCredentialsData = [];
+    } else {
+      accountCredentialsData = data;
+    }
+
     currentSection = "accounts";
     filteredData = [...accountCredentialsData];
     updateSectionTitle("Account Credentials");
@@ -218,7 +242,7 @@ async function loadCoordinates() {
     } else {
       coordinatesData = data;
     }
-    
+
     currentSection = "coordinates";
     filteredData = [...coordinatesData];
     updateSectionTitle("Coordinates");
@@ -277,7 +301,7 @@ async function loadMessages() {
     } else {
       messagesData = data;
     }
-    
+
     currentSection = "messages";
     filteredData = [...messagesData];
     updateSectionTitle("Messages");
@@ -389,7 +413,7 @@ function getCurrentData() {
     default:
       data = [];
   }
-  
+
   return data;
 }
 
@@ -398,6 +422,7 @@ function renderTable() {
   const startIndex = (currentPage - 1) * entriesPerPage;
   const endIndex = startIndex + entriesPerPage;
   const pageData = filteredData.slice(startIndex, endIndex);
+  const currentData = getCurrentData();
 
   tableBody.innerHTML = "";
 
@@ -420,10 +445,61 @@ function renderTable() {
       default:
         colSpan = 6;
     }
+
+    // Check if it's empty database or no search results
+    const isEmptyDatabase = currentData.length === 0;
+    const isSearchResult = searchTerm && currentData.length > 0;
+
+    let iconClass, message, subMessage;
+
+    if (isEmptyDatabase) {
+      // Empty database state
+      switch (currentSection) {
+        case "devices":
+          iconClass = "fas fa-mobile-alt";
+          message = "No devices found in database";
+          subMessage = "Click the + button to add your first device";
+          break;
+        case "accounts":
+          iconClass = "fas fa-user-shield";
+          message = "No account credentials found in database";
+          subMessage =
+            "Click the + button to add your first account credential";
+          break;
+        case "coordinates":
+          iconClass = "fas fa-map-marker-alt";
+          message = "No coordinates found in database";
+          subMessage = "Click the + button to add your first coordinate";
+          break;
+        case "messages":
+          iconClass = "fas fa-comment";
+          message = "No messages found in database";
+          subMessage = "Click the + button to add your first message";
+          break;
+        default:
+          iconClass = "fas fa-database";
+          message = "No data found in database";
+          subMessage = "Click the + button to add your first item";
+      }
+    } else if (isSearchResult) {
+      // Search returned no results
+      iconClass = "fas fa-search";
+      message = "No data found matching your search criteria";
+      subMessage = `Try searching for something else or clear the search to see all ${currentSection}`;
+    } else {
+      // This shouldn't happen, but fallback
+      iconClass = "fas fa-exclamation-triangle";
+      message = "No data available";
+      subMessage = "Please try refreshing the page";
+    }
+
     noDataRow.innerHTML = `
-            <td colspan="${colSpan}" class="text-center text-muted py-4">
-                <i class="fas fa-search fa-2x mb-3"></i>
-                <p>No data found matching your search criteria</p>
+            <td colspan="${colSpan}" class="text-center py-5">
+                <div class="empty-state">
+                    <i class="${iconClass} fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted mb-2">${message}</h5>
+                    <p class="text-muted small mb-0">${subMessage}</p>
+                </div>
             </td>
         `;
     tableBody.appendChild(noDataRow);
@@ -441,10 +517,14 @@ function renderTable() {
                     <td>${item.device_id}</td>
                     <td>${item.name || "-"}</td>
                     <td>
-                        <button class="btn btn-sm btn-outline-primary action-btn" onclick="editItem(${item.id})">
+                        <button class="btn btn-sm btn-outline-primary action-btn" onclick="editItem(${
+                          item.id
+                        })">
                             <i class="fas fa-edit"></i>
                         </button>
-                        <button class="btn btn-sm btn-outline-danger action-btn" onclick="deleteItem(${item.id})">
+                        <button class="btn btn-sm btn-outline-danger action-btn" onclick="deleteItem(${
+                          item.id
+                        })">
                             <i class="fas fa-trash"></i>
                         </button>
                     </td>
@@ -455,7 +535,13 @@ function renderTable() {
                     <td>${rowNumber}</td>
                     <td>${item.email}</td>
                     <td>${item.password ? "••••••••" : "-"}</td>
-                    <td>${item.device_name ? item.device_name : (item.device_id ? item.device_id : "-")}</td>
+                    <td>${
+                      item.device_name
+                        ? item.device_name
+                        : item.device_id
+                        ? item.device_id
+                        : "-"
+                    }</td>
                     <td>
                         <button class="btn btn-sm btn-outline-primary action-btn" onclick="editItem(${
                           item.id
@@ -654,10 +740,6 @@ function deleteItem(id) {
   showDeleteModal(id);
 }
 
-
-
-
-
 // Loading states
 function showLoading() {
   const tableSection = document.querySelector(".table-section");
@@ -671,20 +753,20 @@ function hideLoading() {
 
 function showError(message) {
   // Create a better error display
-  const errorDiv = document.createElement('div');
-  errorDiv.className = 'alert alert-danger alert-dismissible fade show';
-  errorDiv.style.position = 'fixed';
-  errorDiv.style.top = '20px';
-  errorDiv.style.right = '20px';
-  errorDiv.style.zIndex = '9999';
-  errorDiv.style.minWidth = '400px';
+  const errorDiv = document.createElement("div");
+  errorDiv.className = "alert alert-danger alert-dismissible fade show";
+  errorDiv.style.position = "fixed";
+  errorDiv.style.top = "20px";
+  errorDiv.style.right = "20px";
+  errorDiv.style.zIndex = "9999";
+  errorDiv.style.minWidth = "400px";
   errorDiv.innerHTML = `
     <strong>Error:</strong> ${message}
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
   `;
-  
+
   document.body.appendChild(errorDiv);
-  
+
   // Auto-remove after 10 seconds
   setTimeout(() => {
     if (errorDiv.parentNode) {
@@ -716,24 +798,26 @@ function refreshData() {
 function showCreateModal() {
   isEditMode = false;
   currentEditId = null;
-  
+
   // Reset form
-  document.getElementById('createEditForm').reset();
-  document.getElementById('editItemId').value = '';
-  
+  document.getElementById("createEditForm").reset();
+  document.getElementById("editItemId").value = "";
+
   // Update modal title
-  document.getElementById('createEditModalLabel').textContent = `Create New ${getCurrentSectionTitle()}`;
-  
+  document.getElementById(
+    "createEditModalLabel"
+  ).textContent = `Create New ${getCurrentSectionTitle()}`;
+
   // Show appropriate form based on current section
   showCurrentSectionForm();
-  
+
   // Load device IDs for account credentials if needed
-  if (currentSection === 'accounts') {
+  if (currentSection === "accounts") {
     loadDeviceIds();
   }
-  
+
   // Show modal
-  const modal = new bootstrap.Modal(document.getElementById('createEditModal'));
+  const modal = new bootstrap.Modal(document.getElementById("createEditModal"));
   modal.show();
 }
 
@@ -741,56 +825,58 @@ function showCreateModal() {
 function showEditModal(id) {
   isEditMode = true;
   currentEditId = id;
-  
+
   // Get current item data
   const currentData = getCurrentData();
-  const item = currentData.find(item => item.id === id);
-  
+  const item = currentData.find((item) => item.id === id);
+
   if (!item) {
-    showError('Item not found');
+    showError("Item not found");
     return;
   }
-  
+
   // Update modal title
-  document.getElementById('createEditModalLabel').textContent = `Edit ${getCurrentSectionTitle()}`;
-  
+  document.getElementById(
+    "createEditModalLabel"
+  ).textContent = `Edit ${getCurrentSectionTitle()}`;
+
   // Show appropriate form based on current section
   showCurrentSectionForm();
-  
+
   // Populate form with current data
   populateFormWithData(item);
-  
+
   // Load device IDs for account credentials if needed
-  if (currentSection === 'accounts') {
+  if (currentSection === "accounts") {
     loadDeviceIds();
   }
-  
+
   // Show modal
-  const modal = new bootstrap.Modal(document.getElementById('createEditModal'));
+  const modal = new bootstrap.Modal(document.getElementById("createEditModal"));
   modal.show();
 }
 
 // Show current section form
 function showCurrentSectionForm() {
   // Hide all forms
-  document.getElementById('devicesForm').style.display = 'none';
-  document.getElementById('accountsForm').style.display = 'none';
-  document.getElementById('coordinatesForm').style.display = 'none';
-  document.getElementById('messagesForm').style.display = 'none';
-  
+  document.getElementById("devicesForm").style.display = "none";
+  document.getElementById("accountsForm").style.display = "none";
+  document.getElementById("coordinatesForm").style.display = "none";
+  document.getElementById("messagesForm").style.display = "none";
+
   // Show current section form
   switch (currentSection) {
-    case 'devices':
-      document.getElementById('devicesForm').style.display = 'block';
+    case "devices":
+      document.getElementById("devicesForm").style.display = "block";
       break;
-    case 'accounts':
-      document.getElementById('accountsForm').style.display = 'block';
+    case "accounts":
+      document.getElementById("accountsForm").style.display = "block";
       break;
-    case 'coordinates':
-      document.getElementById('coordinatesForm').style.display = 'block';
+    case "coordinates":
+      document.getElementById("coordinatesForm").style.display = "block";
       break;
-    case 'messages':
-      document.getElementById('messagesForm').style.display = 'block';
+    case "messages":
+      document.getElementById("messagesForm").style.display = "block";
       break;
   }
 }
@@ -798,36 +884,36 @@ function showCurrentSectionForm() {
 // Get current section title
 function getCurrentSectionTitle() {
   switch (currentSection) {
-    case 'devices':
-      return 'Device';
-    case 'accounts':
-      return 'Account Credential';
-    case 'coordinates':
-      return 'Coordinate';
-    case 'messages':
-      return 'Message';
+    case "devices":
+      return "Device";
+    case "accounts":
+      return "Account Credential";
+    case "coordinates":
+      return "Coordinate";
+    case "messages":
+      return "Message";
     default:
-      return 'Item';
+      return "Item";
   }
 }
 
 // Populate form with data
 function populateFormWithData(item) {
   switch (currentSection) {
-    case 'devices':
-      document.getElementById('deviceId').value = item.device_id || '';
-      document.getElementById('deviceName').value = item.name || '';
+    case "devices":
+      document.getElementById("deviceId").value = item.device_id || "";
+      document.getElementById("deviceName").value = item.name || "";
       break;
-    case 'accounts':
-      document.getElementById('email').value = item.email || '';
-      document.getElementById('password').value = item.password || '';
-      document.getElementById('deviceIdSelect').value = item.device_id || '';
+    case "accounts":
+      document.getElementById("email").value = item.email || "";
+      document.getElementById("password").value = item.password || "";
+      document.getElementById("deviceIdSelect").value = item.device_id || "";
       break;
-    case 'coordinates':
-      document.getElementById('coordinateInput').value = item.coordinate || '';
+    case "coordinates":
+      document.getElementById("coordinateInput").value = item.coordinate || "";
       break;
-    case 'messages':
-      document.getElementById('messageInput').value = item.message || '';
+    case "messages":
+      document.getElementById("messageInput").value = item.message || "";
       break;
   }
 }
@@ -836,12 +922,12 @@ function populateFormWithData(item) {
 async function loadDeviceIds() {
   try {
     const response = await fetch(`${API_BASE_URL}/devices`, {
-      method: 'GET',
+      method: "GET",
       headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
+        Accept: "application/json",
+        "Content-Type": "application/json",
       },
-      mode: 'cors',
+      mode: "cors",
     });
 
     if (!response.ok) {
@@ -849,21 +935,20 @@ async function loadDeviceIds() {
     }
 
     const devices = await response.json();
-    const select = document.getElementById('deviceIdSelect');
-    
+    const select = document.getElementById("deviceIdSelect");
+
     // Clear existing options
     select.innerHTML = '<option value="">Select Device ID</option>';
-    
+
     // Add device options
-    devices.forEach(device => {
-      const option = document.createElement('option');
+    devices.forEach((device) => {
+      const option = document.createElement("option");
       option.value = device.device_id;
       option.textContent = device.name || device.device_id; // Show name if available, fallback to device_id
       select.appendChild(option);
     });
-    
   } catch (error) {
-    console.error('Failed to load device IDs:', error);
+    console.error("Failed to load device IDs:", error);
   }
 }
 
@@ -871,76 +956,83 @@ async function loadDeviceIds() {
 async function saveItem() {
   try {
     let data = {};
-    let endpoint = '';
-    let method = 'POST';
-    
+    let endpoint = "";
+    let method = "POST";
+
     if (isEditMode) {
-      method = 'PUT';
-      endpoint = `/${currentSection === 'accounts' ? 'accountCredentials' : currentSection}/${currentEditId}`;
+      method = "PUT";
+      endpoint = `/${
+        currentSection === "accounts" ? "accountCredentials" : currentSection
+      }/${currentEditId}`;
     } else {
-      endpoint = `/${currentSection === 'accounts' ? 'accountCredentials' : currentSection}`;
+      endpoint = `/${
+        currentSection === "accounts" ? "accountCredentials" : currentSection
+      }`;
     }
-    
+
     // Build data object based on current section
     switch (currentSection) {
-      case 'devices':
+      case "devices":
         data = {
-          device_id: document.getElementById('deviceId').value,
-          name: document.getElementById('deviceName').value
+          device_id: document.getElementById("deviceId").value,
+          name: document.getElementById("deviceName").value,
         };
         break;
-      case 'accounts':
+      case "accounts":
         data = {
-          email: document.getElementById('email').value,
-          password: document.getElementById('password').value,
-          device_id: document.getElementById('deviceIdSelect').value
+          email: document.getElementById("email").value,
+          password: document.getElementById("password").value,
+          device_id: document.getElementById("deviceIdSelect").value,
         };
         break;
-      case 'coordinates':
+      case "coordinates":
         data = {
-          coordinate: document.getElementById('coordinateInput').value
+          coordinate: document.getElementById("coordinateInput").value,
         };
         break;
-      case 'messages':
+      case "messages":
         data = {
-          message: document.getElementById('messageInput').value
+          message: document.getElementById("messageInput").value,
         };
         break;
     }
-    
+
     // Validate required fields
     if (!validateForm(data)) {
       return;
     }
-    
+
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: method,
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify(data),
-      mode: 'cors',
+      mode: "cors",
     });
-    
+
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      throw new Error(
+        errorData.error || `HTTP error! status: ${response.status}`
+      );
     }
-    
+
     const result = await response.json();
-    
+
     // Close modal
-    const modal = bootstrap.Modal.getInstance(document.getElementById('createEditModal'));
+    const modal = bootstrap.Modal.getInstance(
+      document.getElementById("createEditModal")
+    );
     modal.hide();
-    
+
     // Show success message
-    showSuccess(result.message || 'Item saved successfully');
-    
+    showSuccess(result.message || "Item saved successfully");
+
     // Refresh data from API
     await refreshData();
-    
   } catch (error) {
-    console.error('Failed to save item:', error);
+    console.error("Failed to save item:", error);
     showError(`Failed to save item: ${error.message}`);
   }
 }
@@ -948,27 +1040,27 @@ async function saveItem() {
 // Validate form data
 function validateForm(data) {
   switch (currentSection) {
-    case 'devices':
+    case "devices":
       if (!data.device_id) {
-        showError('Device ID is required');
+        showError("Device ID is required");
         return false;
       }
       break;
-    case 'accounts':
+    case "accounts":
       if (!data.email || !data.password) {
-        showError('Email and password are required');
+        showError("Email and password are required");
         return false;
       }
       break;
-    case 'coordinates':
+    case "coordinates":
       if (!data.coordinate) {
-        showError('Coordinate is required');
+        showError("Coordinate is required");
         return false;
       }
       break;
-    case 'messages':
+    case "messages":
       if (!data.message) {
-        showError('Message is required');
+        showError("Message is required");
         return false;
       }
       break;
@@ -980,89 +1072,103 @@ function validateForm(data) {
 function showDeleteModal(id) {
   // Get current item data
   const currentData = getCurrentData();
-  const item = currentData.find(item => item.id === id);
-  
+  const item = currentData.find((item) => item.id === id);
+
   if (!item) {
-    showError('Item not found');
+    showError("Item not found");
     return;
   }
-  
+
   // Create meaningful description based on current section
-  let itemDescription = '';
+  let itemDescription = "";
   switch (currentSection) {
-    case 'devices':
-      itemDescription = `Device ID: ${item.device_id}, Name: ${item.name || 'N/A'}`;
+    case "devices":
+      itemDescription = `Device ID: ${item.device_id}, Name: ${
+        item.name || "N/A"
+      }`;
       break;
-    case 'accounts':
-      itemDescription = `Email: ${item.email}, Device: ${item.device_name || item.device_id || 'N/A'}`;
+    case "accounts":
+      itemDescription = `Email: ${item.email}, Device: ${
+        item.device_name || item.device_id || "N/A"
+      }`;
       break;
-    case 'coordinates':
+    case "coordinates":
       itemDescription = `Coordinate: ${item.coordinate}`;
       break;
-    case 'messages':
+    case "messages":
       itemDescription = `Message: ${item.message}`;
       break;
   }
-  
+
   // Store the actual ID for the delete operation
-  document.getElementById('deleteItemId').setAttribute('data-item-id', id);
-  document.getElementById('deleteItemId').textContent = itemDescription;
-  const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+  document.getElementById("deleteItemId").setAttribute("data-item-id", id);
+  document.getElementById("deleteItemId").textContent = itemDescription;
+  const modal = new bootstrap.Modal(document.getElementById("deleteModal"));
   modal.show();
 }
 
 // Confirm delete
 async function confirmDelete() {
   try {
-    const id = document.getElementById('deleteItemId').getAttribute('data-item-id');
-    
-    const response = await fetch(`${API_BASE_URL}/${currentSection === 'accounts' ? 'accountCredentials' : currentSection}/${id}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      mode: 'cors',
-    });
-    
+    const id = document
+      .getElementById("deleteItemId")
+      .getAttribute("data-item-id");
+
+    const response = await fetch(
+      `${API_BASE_URL}/${
+        currentSection === "accounts" ? "accountCredentials" : currentSection
+      }/${id}`,
+      {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        mode: "cors",
+      }
+    );
+
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      throw new Error(
+        errorData.error || `HTTP error! status: ${response.status}`
+      );
     }
-    
+
     const result = await response.json();
-    
+
     // Close modal
-    const modal = bootstrap.Modal.getInstance(document.getElementById('deleteModal'));
+    const modal = bootstrap.Modal.getInstance(
+      document.getElementById("deleteModal")
+    );
     modal.hide();
-    
+
     // Show success message
-    showSuccess(result.message || 'Item deleted successfully');
-    
+    showSuccess(result.message || "Item deleted successfully");
+
     // Refresh data from API instead of just removing from local arrays
     await refreshData();
-    
   } catch (error) {
-    console.error('Failed to delete item:', error);
+    console.error("Failed to delete item:", error);
     showError(`Failed to delete item: ${error.message}`);
   }
 }
 
 // Show success message
 function showSuccess(message) {
-  const successDiv = document.createElement('div');
-  successDiv.className = 'alert alert-success alert-dismissible fade show';
-  successDiv.style.position = 'fixed';
-  successDiv.style.top = '20px';
-  successDiv.style.right = '20px';
-  successDiv.style.zIndex = '9999';
-  successDiv.style.minWidth = '400px';
+  const successDiv = document.createElement("div");
+  successDiv.className = "alert alert-success alert-dismissible fade show";
+  successDiv.style.position = "fixed";
+  successDiv.style.top = "20px";
+  successDiv.style.right = "20px";
+  successDiv.style.zIndex = "9999";
+  successDiv.style.minWidth = "400px";
   successDiv.innerHTML = `
     <strong>Success:</strong> ${message}
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
   `;
-  
+
   document.body.appendChild(successDiv);
-  
+
   // Auto-remove after 5 seconds
   setTimeout(() => {
     if (successDiv.parentNode) {
@@ -1074,170 +1180,183 @@ function showSuccess(message) {
 // Batch Insert Functions
 function showBatchInsertModal() {
   // Reset form
-  document.getElementById('batchData').value = '';
-  
+  document.getElementById("batchData").value = "";
+
   // Update modal title based on current section
   const sectionTitle = getCurrentSectionTitle();
-  document.getElementById('batchInsertModalLabel').textContent = `Batch Insert ${sectionTitle}s`;
-  
+  document.getElementById(
+    "batchInsertModalLabel"
+  ).textContent = `Batch Insert ${sectionTitle}s`;
+
   // Update placeholder based on current section
-  const batchDataTextarea = document.getElementById('batchData');
+  const batchDataTextarea = document.getElementById("batchData");
   switch (currentSection) {
-    case 'devices':
+    case "devices":
       batchDataTextarea.placeholder = `device001,Device One
 device002,Device Two
 device003,Device Three
 (device_id,name - both are required)`;
       break;
-    case 'accounts':
-      batchDataTextarea.placeholder = `user1@example.com,password123,device001
-user2@example.com,password456,device002
-user3@example.com,password789,device003
-(email,password,device_id - all are required)`;
+    case "accounts":
+      batchDataTextarea.placeholder = `user1@example.com,password123,VIP-24
+user2@example.com,password456,Device Two
+user3@example.com,password789,My Device
+(email,password,device_name - all are required)`;
       break;
-    case 'coordinates':
+    case "coordinates":
       batchDataTextarea.placeholder = `40.7128,-74.0060
 34.0522,-118.2437
 41.8781,-87.6298
 (one coordinate per line)`;
       break;
-    case 'messages':
+    case "messages":
       batchDataTextarea.placeholder = `Hello, this is message 1
 Welcome to our system
 Thank you for using our service
 (one message per line)`;
       break;
   }
-  
+
   // Show modal
-  const modal = new bootstrap.Modal(document.getElementById('batchInsertModal'));
+  const modal = new bootstrap.Modal(
+    document.getElementById("batchInsertModal")
+  );
   modal.show();
 }
 
 function addSampleData() {
-  const batchData = document.getElementById('batchData');
-  let sampleData = '';
-  
+  const batchData = document.getElementById("batchData");
+  let sampleData = "";
+
   switch (currentSection) {
-    case 'devices':
+    case "devices":
       sampleData = `device001,Device One
 device002,Device Two
 device003,Device Three`;
       break;
-    case 'accounts':
-      sampleData = `user1@example.com,password123,device001
-user2@example.com,password456,device002
-user3@example.com,password789,device003`;
+    case "accounts":
+      sampleData = `user1@example.com,password123,VIP-24
+user2@example.com,password456,Device Two
+user3@example.com,password789,My Device`;
       break;
-    case 'coordinates':
+    case "coordinates":
       sampleData = `40.7128,-74.0060
 34.0522,-118.2437
 41.8781,-87.6298`;
       break;
-    case 'messages':
+    case "messages":
       sampleData = `Hello, this is message 1
 Welcome to our system
 Thank you for using our service`;
       break;
   }
-  
+
   batchData.value = sampleData;
 }
 
 async function processBatchInsert() {
   try {
-    const batchData = document.getElementById('batchData').value.trim();
+    const batchData = document.getElementById("batchData").value.trim();
     if (!batchData) {
-      showError('Please enter some data to insert');
+      showError("Please enter some data to insert");
       return;
     }
-    
-    const lines = batchData.split('\n').filter(line => line.trim() !== '');
+
+    const lines = batchData.split("\n").filter((line) => line.trim() !== "");
     if (lines.length === 0) {
-      showError('No valid data found');
+      showError("No valid data found");
       return;
     }
-    
-    let endpoint = '';
+
+    let endpoint = "";
     let data = {};
-    
+
     switch (currentSection) {
-      case 'devices':
-        endpoint = '/devices/batch';
-        const devices = lines.map(line => {
-          const parts = line.split(',').map(part => part.trim());
+      case "devices":
+        endpoint = "/devices/batch";
+        const devices = lines.map((line) => {
+          const parts = line.split(",").map((part) => part.trim());
           if (parts.length < 2) {
-            throw new Error(`Invalid device format: ${line}. Expected: device_id,name`);
+            throw new Error(
+              `Invalid device format: ${line}. Expected: device_id,name`
+            );
           }
           return {
             device_id: parts[0],
-            name: parts[1]
+            name: parts[1],
           };
         });
         data = { devices };
         break;
-        
-      case 'accounts':
-        endpoint = '/accountCredentials/batch';
-        const credentials = lines.map(line => {
-          const parts = line.split(',').map(part => part.trim());
+
+      case "accounts":
+        endpoint = "/accountCredentials/batch";
+        const credentials = lines.map((line) => {
+          const parts = line.split(",").map((part) => part.trim());
           if (parts.length < 3) {
-            throw new Error(`Invalid credential format: ${line}. Expected: email,password,device_id`);
+            throw new Error(
+              `Invalid credential format: ${line}. Expected: email,password,device_name`
+            );
           }
           return {
             email: parts[0],
             password: parts[1],
-            device_id: parts[2]
+            device_name: parts[2],
           };
         });
         data = { credentials };
         break;
-        
-      case 'coordinates':
-        endpoint = '/coordinates/batch';
-        const coordinates = lines.map(line => ({
-          coordinate: line.trim()
+
+      case "coordinates":
+        endpoint = "/coordinates/batch";
+        const coordinates = lines.map((line) => ({
+          coordinate: line.trim(),
         }));
         data = { coordinates };
         break;
-        
-      case 'messages':
-        endpoint = '/messages/batch';
-        const messages = lines.map(line => ({
-          message: line.trim()
+
+      case "messages":
+        endpoint = "/messages/batch";
+        const messages = lines.map((line) => ({
+          message: line.trim(),
         }));
         data = { messages };
         break;
     }
-    
+
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify(data),
-      mode: 'cors',
+      mode: "cors",
     });
-    
+
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      throw new Error(
+        errorData.error || `HTTP error! status: ${response.status}`
+      );
     }
-    
+
     const result = await response.json();
-    
+
     // Close modal
-    const modal = bootstrap.Modal.getInstance(document.getElementById('batchInsertModal'));
+    const modal = bootstrap.Modal.getInstance(
+      document.getElementById("batchInsertModal")
+    );
     modal.hide();
-    
+
     // Show success message
-    showSuccess(`${result.count} ${getCurrentSectionTitle()}s created successfully`);
-    
+    showSuccess(
+      `${result.count} ${getCurrentSectionTitle()}s created successfully`
+    );
+
     // Refresh data from API
     await refreshData();
-    
   } catch (error) {
-    console.error('Failed to process batch insert:', error);
+    console.error("Failed to process batch insert:", error);
     showError(`Failed to process batch insert: ${error.message}`);
   }
 }
