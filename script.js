@@ -1,14 +1,91 @@
 // API Configuration
 const API_BASE_URL = CONFIG.API_BASE_URL;
 
+// JWT Token Management
+function getStoredToken() {
+  return localStorage.getItem("jwtToken");
+}
+
+function setStoredToken(token) {
+  localStorage.setItem("jwtToken", token);
+}
+
+function removeStoredToken() {
+  localStorage.removeItem("jwtToken");
+  localStorage.removeItem("authToken");
+  localStorage.removeItem("userData");
+}
+
+function isTokenExpired(token) {
+  if (!token) return true;
+
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    const currentTime = Date.now() / 1000;
+    return payload.exp < currentTime;
+  } catch (error) {
+    console.error("Error parsing token:", error);
+    return true;
+  }
+}
+
+function redirectToLogin() {
+  removeStoredToken();
+  window.location.href = "login.html";
+}
+
+// API Helper function with JWT token and 401 handling
+async function apiRequest(url, options = {}) {
+  const token = getStoredToken();
+
+  // Check if token exists and is not expired
+  if (!token || isTokenExpired(token)) {
+    redirectToLogin();
+    return Promise.reject(new Error("Token expired or missing"));
+  }
+
+  const defaultHeaders = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+
+  const mergedOptions = {
+    ...options,
+    headers: {
+      ...defaultHeaders,
+      ...options.headers,
+    },
+    mode: "cors",
+  };
+
+  try {
+    const response = await fetch(url, mergedOptions);
+
+    // Handle 401 Unauthorized - token expired or invalid
+    if (response.status === 401) {
+      console.warn(
+        "Received 401 - token expired or invalid, redirecting to login"
+      );
+      redirectToLogin();
+      return Promise.reject(new Error("Unauthorized - token expired"));
+    }
+
+    return response;
+  } catch (error) {
+    console.error("API request failed:", error);
+    throw error;
+  }
+}
+
 // Authentication middleware
 function checkAuth() {
-  const token = localStorage.getItem("authToken");
+  const token = getStoredToken();
   const userData = localStorage.getItem("userData");
 
-  if (!token || !userData) {
-    // Not authenticated, redirect to login
-    window.location.href = "login.html";
+  if (!token || !userData || isTokenExpired(token)) {
+    // Not authenticated or token expired, redirect to login
+    redirectToLogin();
     return false;
   }
 
@@ -17,8 +94,7 @@ function checkAuth() {
 
 // Logout function
 function logout() {
-  localStorage.removeItem("authToken");
-  localStorage.removeItem("userData");
+  removeStoredToken();
   window.location.href = "login.html";
 }
 
@@ -86,13 +162,8 @@ function setupEventListeners() {
 async function loadDevices() {
   try {
     showLoading();
-    const response = await fetch(`${API_BASE_URL}/devices`, {
+    const response = await apiRequest(`${API_BASE_URL}/devices`, {
       method: "GET",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      mode: "cors",
     });
 
     if (!response.ok) {
@@ -162,13 +233,8 @@ async function loadDevices() {
 async function loadAccountCredentials() {
   try {
     showLoading();
-    const response = await fetch(`${API_BASE_URL}/accountCredentials`, {
+    const response = await apiRequest(`${API_BASE_URL}/accountCredentials`, {
       method: "GET",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      mode: "cors",
     });
 
     if (!response.ok) {
@@ -220,13 +286,8 @@ async function loadAccountCredentials() {
 async function loadCoordinates() {
   try {
     showLoading();
-    const response = await fetch(`${API_BASE_URL}/coordinates`, {
+    const response = await apiRequest(`${API_BASE_URL}/coordinates`, {
       method: "GET",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      mode: "cors",
     });
 
     if (!response.ok) {
@@ -279,13 +340,8 @@ async function loadCoordinates() {
 async function loadMessages() {
   try {
     showLoading();
-    const response = await fetch(`${API_BASE_URL}/messages`, {
+    const response = await apiRequest(`${API_BASE_URL}/messages`, {
       method: "GET",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      mode: "cors",
     });
 
     if (!response.ok) {
@@ -921,13 +977,8 @@ function populateFormWithData(item) {
 // Load device IDs for account credentials
 async function loadDeviceIds() {
   try {
-    const response = await fetch(`${API_BASE_URL}/devices`, {
+    const response = await apiRequest(`${API_BASE_URL}/devices`, {
       method: "GET",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      mode: "cors",
     });
 
     if (!response.ok) {
@@ -1002,13 +1053,9 @@ async function saveItem() {
       return;
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await apiRequest(`${API_BASE_URL}${endpoint}`, {
       method: method,
-      headers: {
-        "Content-Type": "application/json",
-      },
       body: JSON.stringify(data),
-      mode: "cors",
     });
 
     if (!response.ok) {
@@ -1114,16 +1161,12 @@ async function confirmDelete() {
       .getElementById("deleteItemId")
       .getAttribute("data-item-id");
 
-    const response = await fetch(
+    const response = await apiRequest(
       `${API_BASE_URL}/${
         currentSection === "accounts" ? "accountCredentials" : currentSection
       }/${id}`,
       {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        mode: "cors",
       }
     );
 
@@ -1324,13 +1367,9 @@ async function processBatchInsert() {
         break;
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await apiRequest(`${API_BASE_URL}${endpoint}`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
       body: JSON.stringify(data),
-      mode: "cors",
     });
 
     if (!response.ok) {
